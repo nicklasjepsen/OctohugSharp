@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -16,51 +17,98 @@ namespace OctohugSharp
 
             foreach (var orgPath in Directory.EnumerateFiles(originalsDir))
             {
+                var fInfo = new FileInfo(orgPath);
                 var orgContent = File.ReadAllLines(Path.Combine(originalsDir, orgPath));
-                var sb = new StringBuilder();
+                var sb = ParseMetaData(orgContent);
+                sb = ParsePost(sb, orgContent);
 
-                var meta = GetMeta(orgContent);
 
-                sb.AppendLine("---");
-                foreach (var metaSetting in meta.MetaSettings)
-                {
-                    var metaName = metaSetting.Substring(0, metaSetting.IndexOf(':'));
-                    var metaValue = metaSetting.Substring(metaSetting.IndexOf(':') + 2);
-
-                    if (metaName == "layout" ||
-                        metaName == "date_text")
-                        continue;
-                    if (metaName == "permalink")
-                    {
-                        sb.AppendLine("url: \"" + metaValue + "\"");
-                        continue;
-                    }
-                    if (!metaValue.StartsWith("\""))
-                        metaValue = "\"" + metaValue;
-                    if (!metaValue.EndsWith("\""))
-                        metaValue = metaValue + "\"";
-                    sb.AppendLine(metaName + ": " + metaValue);
-                }
-                sb.AppendLine("categories:");
-                foreach (var category in meta.Categories)
-                {
-                    sb.AppendLine(category);
-                }
-                sb.AppendLine("tags:");
-                foreach (var tag in meta.Tags)
-                {
-                    sb.AppendLine(tag);
-                }
-                sb.AppendLine("---");
-
-                //for (int i = meta.MetaEndTagIndex; i < orgContent.Length; i++)
-                //{
-                //    var line = orgContent[i];
-                //}
                 Console.Write(sb);
-                //File.WriteAllText(Path.Combine(outputDir, orgPath), sb.ToString());
-                Console.Read();
+                File.WriteAllText(Path.Combine(outputDir, fInfo.Name), sb.ToString());
             }
+        }
+
+        private static StringBuilder ParsePost(StringBuilder sb, string[] contents)
+        {
+            var numberOfMetaSectionTags = 0;
+            for (int i = 0; i < contents.Length; i++)
+            {
+                var line = contents[i];
+                if (line == "---")
+                {
+                    numberOfMetaSectionTags++;
+                    continue;
+                }
+                if (numberOfMetaSectionTags < 2)
+                    continue;
+
+
+                // Now in the post
+                var hashTagCount = 0;
+                if (line.StartsWith("#"))
+                {
+                    while (line.StartsWith("#"))
+                    {
+                        line = line.Trim();
+                        hashTagCount++;
+                        if (line.LastIndexOf("#") == line.Length - 1)
+                            line = line.Substring(1, line.Length - 2);
+                    }
+
+                    var hashes = string.Empty;
+                    for (var j = 0; j < hashTagCount; j++)
+                    {
+                        hashes = hashes + "#";
+                    }
+
+                    line = hashes + " " + line;
+                }
+
+                sb.Append(line);
+                if (i + 1 != contents.Length)
+                    sb.AppendLine();
+            }
+            return sb;
+        }
+
+        private static StringBuilder ParseMetaData(string[] orgContent)
+        {
+            var sb = new StringBuilder();
+            var meta = GetMeta(orgContent);
+
+            sb.AppendLine("---");
+            foreach (var metaSetting in meta.MetaSettings)
+            {
+                var metaName = metaSetting.Substring(0, metaSetting.IndexOf(':'));
+                var metaValue = metaSetting.Substring(metaSetting.IndexOf(':') + 2);
+
+                if (metaName == "layout" ||
+                    metaName == "date_text")
+                    continue;
+                if (metaName == "permalink")
+                {
+                    sb.AppendLine("url: \"" + metaValue + "\"");
+                    continue;
+                }
+                if (!metaValue.StartsWith("\""))
+                    metaValue = "\"" + metaValue;
+                if (!metaValue.EndsWith("\""))
+                    metaValue = metaValue + "\"";
+                sb.AppendLine(metaName + ": " + metaValue);
+            }
+            sb.AppendLine("categories:");
+            foreach (var category in meta.Categories)
+            {
+                sb.AppendLine(category);
+            }
+            sb.AppendLine("tags:");
+            foreach (var tag in meta.Tags)
+            {
+                sb.AppendLine(tag);
+            }
+            sb.AppendLine("---");
+
+            return sb;
         }
 
         class MetaData
@@ -88,7 +136,7 @@ namespace OctohugSharp
                 }
                 if (numberOfSectionTags == 2)
                     break;
-                
+
                 if (content == "categories:")
                 {
                     cats = RemoveListFromMeta(contents, "categories");
@@ -96,7 +144,8 @@ namespace OctohugSharp
                 else if (content == "tags:")
                 {
                     tags = RemoveListFromMeta(contents, "tags");
-                } else if (content.StartsWith(" "))
+                }
+                else if (content.StartsWith(" "))
                     continue;
                 else
                 {
@@ -120,9 +169,9 @@ namespace OctohugSharp
             {
                 if (contents[i] == metaName + ":")
                 {
-                    while (contents.Length > i + 1 && contents[i+1].Trim().StartsWith("-") && !contents[i+1].Trim().StartsWith("---"))
+                    while (contents.Length > i + 1 && contents[i + 1].Trim().StartsWith("-") && !contents[i + 1].Trim().StartsWith("---"))
                     {
-                        results.Add(contents[i+1]);
+                        results.Add(contents[i + 1]);
                         i++;
                     }
                     return results;
