@@ -31,6 +31,8 @@ namespace OctohugSharp
         private static StringBuilder ParsePost(StringBuilder sb, string[] contents)
         {
             var numberOfMetaSectionTags = 0;
+            var insideCodesnippet = false;
+            var lastSnippet = string.Empty;
             for (int i = 0; i < contents.Length; i++)
             {
                 var line = contents[i];
@@ -44,24 +46,30 @@ namespace OctohugSharp
 
 
                 // Now in the post
-                var hashTagCount = 0;
                 if (line.StartsWith("#"))
                 {
-                    while (line.StartsWith("#"))
-                    {
-                        line = line.Trim();
-                        hashTagCount++;
-                        if (line.LastIndexOf("#") == line.Length - 1)
-                            line = line.Substring(1, line.Length - 2);
-                    }
+                    line = ParseHeadning(line);
+                }
 
-                    var hashes = string.Empty;
-                    for (var j = 0; j < hashTagCount; j++)
+                if (line.StartsWith("```"))
+                {
+                    if (insideCodesnippet)
                     {
-                        hashes = hashes + "#";
+                        if (lastSnippet == "```")
+                            line = "```";
+                        else
+                            line = "{{< /highlight >}}";
                     }
-
-                    line = hashes + " " + line;
+                    else
+                    {
+                        var langCode = line.Trim().Substring(3);
+                        if (string.IsNullOrEmpty(langCode))
+                            line = "```";
+                        else
+                            line = $"{{< highlight {langCode} >}}";
+                        lastSnippet = line;
+                    }
+                    insideCodesnippet = !insideCodesnippet;
                 }
 
                 sb.Append(line);
@@ -69,6 +77,28 @@ namespace OctohugSharp
                     sb.AppendLine();
             }
             return sb;
+        }
+
+        private static string ParseHeadning(string line)
+        {
+            var hashTagCount = 0;
+            while (line.EndsWith("#"))
+            {
+                line = line.Substring(0, line.Length - 1);
+                //line = line.Trim();
+                //hashTagCount++;
+                //if (line.LastIndexOf("#") == line.Length - 1)
+                //    line = line.Substring(1, line.Length - 2);
+            }
+
+            var hashes = string.Empty;
+            for (var j = 0; j < hashTagCount; j++)
+            {
+                hashes = hashes + "#";
+            }
+
+            line = hashes + " " + line;
+            return line;
         }
 
         private static StringBuilder ParseMetaData(string[] orgContent)
@@ -80,16 +110,28 @@ namespace OctohugSharp
             foreach (var metaSetting in meta.MetaSettings)
             {
                 var metaName = metaSetting.Substring(0, metaSetting.IndexOf(':'));
-                var metaValue = metaSetting.Substring(metaSetting.IndexOf(':') + 2);
+                var metaValue = string.Empty;
+                if (metaSetting.Length >= metaSetting.IndexOf(':') + 2)
+                    metaValue = metaSetting.Substring(metaSetting.IndexOf(':') + 2);
 
                 if (metaName == "layout" ||
-                    metaName == "date_text")
+                    metaName == "date_text" ||
+                    metaName == "jabber_published")
                     continue;
                 if (metaName == "permalink")
                 {
                     sb.AppendLine("url: \"" + metaValue + "\"");
                     continue;
                 }
+
+                if (string.IsNullOrEmpty(metaValue))
+                {
+                    sb.AppendLine(metaName + ":");
+                    continue;
+                }
+
+                metaValue = metaValue.Replace('"', '\'');
+
                 if (!metaValue.StartsWith("\""))
                     metaValue = "\"" + metaValue;
                 if (!metaValue.EndsWith("\""))
